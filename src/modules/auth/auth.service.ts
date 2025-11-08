@@ -1,6 +1,7 @@
 import { Injectable, UnauthorizedException, BadRequestException } from '@nestjs/common';
 import { SignupDto } from './dto/signup.dto';
 import { LoginDto } from './dto/login.dto';
+import { Response } from 'express';
 import { supabase } from '../../config/db.config';
 
 @Injectable()
@@ -100,5 +101,23 @@ export class AuthService {
     }
 
     return data.user;
+  }
+
+  // max Age is in milliseconds
+  async setCookie(res: Response, token: string, token_name: string, maxAge: number){
+    res.cookie(token_name, token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: maxAge,
+    });
+  }
+
+  async clearCookie(res: Response, token_name: string){
+    res.clearCookie(token_name, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+    });
   }
 }

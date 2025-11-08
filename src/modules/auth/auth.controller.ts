@@ -23,26 +23,11 @@ export class AuthController {
     @Res({ passthrough: true }) res: Response,
   ) {
     const result = await this.authService.signup(signupDto);
-
     // Set both tokens as HTTP-only cookies if they exist
     if (result.access_token && result.refresh_token) {
-      res.cookie('access_token', result.access_token, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'strict',
-        maxAge: 60 * 60 * 1000, // 1 hour (matches Supabase default)
-        path: '/',
-      });
-
-      res.cookie('refresh_token', result.refresh_token, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'strict',
-        maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-        path: '/',
-      });
+      await this.authService.setCookie(res, result.access_token, 'access_token', 60 * 60 * 1000); // 1 hour
+      await this.authService.setCookie(res, result.refresh_token, 'refresh_token', 7 * 24 * 60 * 60 * 1000); // 7 days
     }
-
     // Return everything in response body (cookies + response body approach)
     return result;
   }
@@ -54,27 +39,11 @@ export class AuthController {
     @Res({ passthrough: true }) res: Response,
   ) {
     const result = await this.authService.login(loginDto);
-
-    // Set both tokens as HTTP-only cookies
-    res.cookie('access_token', result.access_token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
-      maxAge: 60 * 60 * 1000, // 1 hour
-      path: '/',
-    });
-
-    res.cookie('refresh_token', result.refresh_token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-      path: '/',
-    });
-
-    // Return everything in response body (cookies + response body approach)
+    await this.authService.setCookie(res, result.access_token, 'access_token', 60 * 60 * 1000); // 1 hour
+    await this.authService.setCookie(res, result.refresh_token, 'refresh_token', 7 * 24 * 60 * 60 * 1000); // 7 days
     return result;
   }
+
 
   @Post('logout')
   @HttpCode(HttpStatus.OK)
@@ -87,55 +56,16 @@ export class AuthController {
       || (req.headers.authorization?.startsWith('Bearer ') 
         ? req.headers.authorization.split(' ')[1] 
         : null);
-
     if (accessToken) {
       // Logout on Supabase side
       await this.authService.logout(accessToken);
     }
-
-    // Clear both cookies
-    res.clearCookie('access_token', {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
-      path: '/',
-    });
-
-    res.clearCookie('refresh_token', {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
-      path: '/',
-    });
+    // Clear cookies
+    await this.authService.clearCookie(res, 'access_token');
+    await this.authService.clearCookie(res, 'refresh_token');
 
     return {
       message: 'Logout successful!',
     };
   }
 }
-
-/*
-User signed up: {
-  user: {
-    id: '749aa565-fdc3-4c6e-bc13-0fd0593f3abe',
-    aud: 'authenticated',
-    role: 'authenticated',
-    email: 'social.rishav.2003@gmail.com',
-    phone: '',
-    confirmation_sent_at: '2025-11-04T20:36:02.911824268Z',
-    app_metadata: { provider: 'email', providers: [Array] },
-    user_metadata: {
-      email: 'social.rishav.2003@gmail.com',
-      email_verified: false,
-      phone_verified: false,
-      sub: '749aa565-fdc3-4c6e-bc13-0fd0593f3abe'
-    },
-    identities: [ [Object] ],
-    created_at: '2025-11-04T20:36:02.838293Z',
-    updated_at: '2025-11-04T20:36:06.003968Z',
-    is_anonymous: false
-  },
-  session: null
-}
-
-*/
