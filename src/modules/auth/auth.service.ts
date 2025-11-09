@@ -2,7 +2,7 @@ import { Injectable, UnauthorizedException, BadRequestException } from '@nestjs/
 import { SignupDto } from './dto/signup.dto';
 import { LoginDto } from './dto/login.dto';
 import { Response } from 'express';
-import { supabase } from '../../config/db.config';
+import { supabase, supabaseAdmin } from '../../config/db.config';
 
 @Injectable()
 export class AuthService {
@@ -95,12 +95,40 @@ export class AuthService {
 
   async verifyAccessToken(accessToken: string) {
     const { data, error } = await supabase.auth.getUser(accessToken);
+
+    console.log('Verifying access token, user data:', data);
     
     if (error || !data.user) {
       return null;
     }
 
     return data.user;
+  }
+
+  async forgetPassword(email:string){
+    const { data, error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${process.env.FRONTEND_URL}/auth/update-password`,
+    });
+    if (error) {
+      throw new BadRequestException(error.message);
+    }
+    return { message: 'Password reset email sent successfully' };
+  }
+
+  async resetPassword(token: string, newPassword: string, refreshToken?: string) {
+    const { data, error } = await supabase.auth.getUser(token);
+    if (error || !data.user) {
+      throw new BadRequestException('Invalid or expired token');
+    }
+    console.log('Resetting password for user:', data.user);
+    // Create a new Supabase client instance for this operation
+    const { data: updateData, error: updateError } = await supabaseAdmin.auth.admin.updateUserById(data.user.id, {
+      password: newPassword,
+    });
+    if (updateError) {
+      throw new BadRequestException(updateError.message);
+    }
+    return { message: 'Password has been reset successfully' };
   }
 
   // max Age is in milliseconds

@@ -68,4 +68,24 @@ export class AuthController {
       message: 'Logout successful!',
     };
   }
+
+  @Post('forget-password')
+  @HttpCode(HttpStatus.OK)
+  async forgetPassword(
+    @Body('email') email: string,
+  ) {
+    const result = await this.authService.forgetPassword(email);
+    return result;
+  }
+
+  @Post('reset-password')
+  @HttpCode(HttpStatus.OK)
+  async resetPassword(
+    @Body('newPassword') newPassword: string,
+    @Body('token') token: string,
+    @Body('refreshToken') refreshToken: string,
+  ) {
+    const result = await this.authService.resetPassword(token, newPassword, refreshToken);
+    return result;
+  }
 }
