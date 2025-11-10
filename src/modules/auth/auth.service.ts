@@ -1,0 +1,151 @@
+import { Injectable, UnauthorizedException, BadRequestException } from '@nestjs/common';
+import { SignupDto } from './dto/signup.dto';
+import { LoginDto } from './dto/login.dto';
+import { Response } from 'express';
+import { supabase, supabaseAdmin } from '../../config/db.config';
+
+@Injectable()
+export class AuthService {
+  async signup(signupDto: SignupDto) {
+    const { email, password } = signupDto;
+    
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+    });
+
+    if (error) {
+      throw new BadRequestException(error.message);
+    }
+
+    // Check if session exists (won't exist if email confirmation is required)
+    if (!data.session) {
+      return {
+        message: 'Signup successful! Please check your email to confirm your account.',
+        user: data.user,
+        requiresEmailConfirmation: true,
+      };
+    }
+
+    // Return access token and refresh token
+    return {
+      message: 'Signup successful!',
+      user: data.user,
+      access_token: data.session.access_token,
+      refresh_token: data.session.refresh_token,
+      expires_in: data.session.expires_in,
+    };
+  }
+
+  async login(loginDto: LoginDto) {
+    const { email, password } = loginDto;
+
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+
+    if (error) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    if (!data.session) {
+      throw new UnauthorizedException('No session created');
+    }
+
+    // Return access token and refresh token
+    return {
+      message: 'Login successful!',
+      user: data.user,
+      access_token: data.session.access_token,
+      refresh_token: data.session.refresh_token,
+      expires_in: data.session.expires_in,
+    };
+  }
+
+  async logout(accessToken: string) {
+    // Sign out using the access token to invalidate it on Supabase's side
+    const { error } = await supabase.auth.admin.signOut(accessToken);
+    
+    if (error) {
+      throw new UnauthorizedException('Failed to logout');
+    }
+
+    return {
+      message: 'Logout successful!',
+    };
+  }
+
+  async refreshTokens(refreshToken: string) {
+    const { data, error } = await supabase.auth.refreshSession({
+      refresh_token: refreshToken,
+    });
+
+    if (error || !data.session) {
+      throw new UnauthorizedException('Invalid or expired refresh token');
+    }
+
+    return {
+      access_token: data.session.access_token,
+      refresh_token: data.session.refresh_token,
+      expires_in: data.session.expires_in,
+      user: data.user,
+    };
+  }
+
+  async verifyAccessToken(accessToken: string) {
+    const { data, error } = await supabase.auth.getUser(accessToken);
+
+    console.log('Verifying access token, user data:', data);
+    
+    if (error || !data.user) {
+      return null;
+    }
+
+    return data.user;
+  }
+
+  async forgetPassword(email:string){
+    const { data, error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${process.env.FRONTEND_URL}/auth/update-password`,
+    });
+    if (error) {
+      throw new BadRequestException(error.message);
+    }
+    return { message: 'Password reset email sent successfully' };
+  }
+
+  async resetPassword(token: string, newPassword: string, refreshToken?: string) {
+    const { data, error } = await supabase.auth.getUser(token);
+    if (error || !data.user) {
+      throw new BadRequestException('Invalid or expired token');
+    }
+    console.log('Resetting password for user:', data.user);
+    // Create a new Supabase client instance for this operation
+    const { data: updateData, error: updateError } = await supabaseAdmin.auth.admin.updateUserById(data.user.id, {
+      password: newPassword,
+    });
+    if (updateError) {
+      throw new BadRequestException(updateError.message);
+    }
+    return { message: 'Password has been reset successfully' };
+  }
+
+  // max Age is in milliseconds
+  async setCookie(res: Response, token: string, token_name: string, maxAge: number){
+    res.cookie(token_name, token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: maxAge,
+    });
+  }
+
+  async clearCookie(res: Response, token_name: string){
+    res.clearCookie(token_name, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+    });
+  }
+}
